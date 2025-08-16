@@ -1,0 +1,11 @@
+input_text,context,case
+"blue shirts","Customer looking for clothing","product_search"
+"show me Arthur Ashe polo shirts","Customer wants specific brand","brand_search"
+"find products between 100 and 500 vnd","Budget-conscious customer","price_filter"
+"i want sneakers on sale","Customer looking for deals","sale_search"
+"từ 100 đến 500 vnd","Vietnamese customer with budget","price_filter_vi"
+"red cotton dresses","Customer wants specific attributes","attribute_search"
+"Nike running shoes","Athletic customer","brand_category_search"
+"cheap winter jackets","Customer wants affordable winter gear","budget_category_search"
+"luxury handbags under 1000 USD","High-end customer with budget","luxury_budget_search"
+"show all sale items","Customer browsing for deals","general_sale_search"

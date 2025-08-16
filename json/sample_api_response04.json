@@ -1,0 +1,13 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "content": [
+            {
+                "type": "text",
+                "text": "{\"products\":[],\"pagination\":{\"hasNextPage\":false,\"hasPreviousPage\":false,\"startCursor\":null,\"endCursor\":null,\"currentPage\":1,\"nextPage\":null,\"maxPages\":2500,\"limitReached\":false},\"available_filters\":[{\"label\":\"Price\",\"values\":{\"label\":[\"Price\"],\"input_options\":[{\"label\":\"Price\",\"input\":{\"price\":{\"min\":0,\"max\":0.0}}}]}}],\"instructions\":\"No products were found matching your search. Please try again with a different query or more specific terms.\\n\\n- Try simpler search terms without filter names (e.g., \\\"wool\\\" instead of \\\"wool material\\\")\\n- If searching for a product in a category (e.g., \\\"burton in snowboards\\\"), try:\\n  1. First search to discover available filters\\n  2. Then search for the product using the appropriate filter\\n- Check available_filters for options relevant to what the user is seeking\\n- Consider suggesting broader search terms or categories\\n- If the user was specific about a particular feature, try searching for just that feature\\n\"}"
+            }
+        ],
+        "isError": false
+    }
+}

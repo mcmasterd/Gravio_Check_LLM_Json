@@ -1,0 +1,36 @@
+# Shopify MCP Workflow System - Dependencies
+# Generated: August 16, 2025
+# Compatible with Python 3.8+
+
+## Core LLM Processing
+openai>=1.3.0
+python-dotenv>=1.0.0
+
+## Rich Console Interface
+rich>=13.0.0
+
+## Google Sheets Integration
+gspread>=5.0.0
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+
+## HTTP Requests & API Calls
+requests>=2.25.0
+
+## Configuration Management
+pyyaml>=6.0.0
+
+## Data Processing (Optional - for CSV handling)
+pandas>=1.3.0
+
+## Standard Library (included in Python, listed for reference)
+# json - Built-in
+# os - Built-in  
+# sys - Built-in
+# time - Built-in
+# pathlib - Built-in (Python 3.4+)
+# typing - Built-in (Python 3.5+)
+# dataclasses - Built-in (Python 3.7+)
+# argparse - Built-in
+# subprocess - Built-in

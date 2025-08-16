@@ -1,0 +1,6 @@
+input_text,context,case
+blue shirts,Customer looking for clothing,product_search
+red dresses 1,Customer wants formal wear - variation 1,formal_search
+Nike running shoes 2,Athletic customer - variation 2,brand_search
+winter jackets under 100 3,Budget-conscious customer - variation 3,budget_search
+luxury handbags 4,High-end customer - variation 4,luxury_search

@@ -1,0 +1,31 @@
+# Development Dependencies for Shopify MCP Workflow System
+# These are additional packages for development, testing, and debugging
+
+## Testing Framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+## Code Quality
+black>=22.0.0
+flake8>=5.0.0
+mypy>=1.0.0
+
+## Development Tools
+ipython>=8.0.0
+jupyter>=1.0.0
+
+## Debugging
+pdb-attach>=3.0.0
+
+## Documentation
+sphinx>=5.0.0
+sphinx-rtd-theme>=1.0.0
+
+## Performance Profiling
+memory-profiler>=0.60.0
+line-profiler>=4.0.0
+
+## API Testing
+httpx>=0.24.0
+
+## Install with: pip install -r requirements-dev.txt

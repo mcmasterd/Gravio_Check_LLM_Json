@@ -1,0 +1,34 @@
+# MANIFEST.in for Shopify MCP Workflow System
+# Specify additional files to include in the distribution
+
+# Include documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+
+# Include requirements files
+include requirements.txt
+include requirements-dev.txt
+
+# Include configuration files
+recursive-include config *.yaml *.yml
+
+# Include data samples (but not actual data)
+include data/input/test_sample.csv
+include data/input/batch_queries_sample.csv
+
+# Include credentials directory structure (but not actual files)
+include credentials/.gitkeep
+
+# Include models and services
+recursive-include models *.py
+recursive-include services *.py
+
+# Exclude sensitive and generated files
+exclude credentials/*.json
+recursive-exclude data/output *
+recursive-exclude backup_* *
+recursive-exclude logs *
+exclude .env*
+recursive-exclude __pycache__ *
+recursive-exclude *.pyc *

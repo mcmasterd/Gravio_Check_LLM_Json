@@ -1,0 +1,90 @@
+# Smart Batch Processor Configuration
+
+# Google Sheets Configuration
+google_sheets:
+  credentials_file: "credentials/shopify-mcp-7cca7904e68a.json"
+  sheet_id: "1xokI1ASL-VfWGNzNvepJdxB3PhDypZZ4iG8eTFM58EI"
+  sheet_name: "Detail"
+  start_row: 2  # Bắt đầu từ hàng 2 (bỏ qua header)
+  columns:
+    id: "A"
+    input_text: "B"
+    case: "C"
+    json_output: "D"
+    api_response: "E"
+    filtered_response: "F"
+    model_info: "G"
+
+# API Configuration
+api:
+  base_url: "https://gravio-chat.myshopify.com/api/mcp"
+  method: "POST"
+  headers:
+    Content-Type: "application/json"
+  timeout: 30
+  retries: 3
+  request_format: "json_rpc_2_0"
+
+# Processing Configuration
+processing:
+  batch_size: 50  # Số rows xử lý trước khi update sheet
+  max_concurrent: 5  # Số luồng đồng thời
+  delay_between_requests: 1.0  # Giây delay giữa các request
+  resume_enabled: true
+  checkpoint_interval: 10  # Save checkpoint mỗi 10 rows
+
+# Rate Limits (requests per minute)
+rate_limits:
+  openai: 60
+  google_sheets: 100
+  api_endpoint: 120
+
+# LLM Configuration
+llm:
+  model: "GPT 4o mini"
+  language: "auto-detect"
+  include_filters: true
+  preserve_brands: true
+
+# Logging
+logging:
+  level: "INFO"
+  file: "data/output/batch_processor.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Response Filtering
+response_filter:
+  keep_fields:
+    - "products"
+    - "available_filters"
+    - "pagination"
+  remove_fields:
+    - "debug_info"
+    - "internal_metrics"
+    - "trace_id"
+  max_response_length: 5000  # Truncate if longer
+
+# Filter Processing Configuration
+filter_processing:
+  validation_enabled: true
+  fallback_strategy: "broaden_search"  # broaden_search | exact_match | hybrid
+  mapping_rules:
+    colors: "text_search"
+    brands: "text_search"
+    product_type: "category_filter"
+    price: "price_range"
+  unsupported_filter_action: "log_and_continue"  # fail | ignore | log_and_continue
+  
+# New Service Configuration
+services:
+  response_filter:
+    data_reduction_target: 75  # Target percentage reduction
+    processing_timeout: 1000   # Max 1000ms processing time
+  
+  api_client:
+    request_format: "json_rpc_2_0"
+    validation_enabled: true
+    
+  workflow:
+    dependency_injection: true
+    service_isolation: true
