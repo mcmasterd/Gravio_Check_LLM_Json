@@ -13,6 +13,7 @@ from models.filter_models import ServiceResult, FilterSpec
 from services.service_container import ServiceContainer
 from services.filter_mapping_service import FilterMappingService
 from services.shopify_api_client import ShopifyAPIClient
+from services.filter_display_formatter import FilterDisplayFormatter
 from services.response_filter_service import ResponseFilterService
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
@@ -249,7 +250,11 @@ class WorkflowOrchestrator:
             # 6. Update Filter Spec với results
             self.filter_mapper.update_result_statistics(filter_spec, filter_result.data.to_dict())
             
-            # 7. Create final responses
+            # 7. Add formatted filter_spec với icons để hiển thị filter đã áp dụng
+            formatted_filter_spec = FilterDisplayFormatter.format_filter_spec_safe(filter_spec)
+            filter_result.data.filter_spec = formatted_filter_spec
+            
+            # 8. Create final responses với filter information included
             api_response_json = json.dumps(filter_result.data.to_dict(), ensure_ascii=False)
             summary_json = json.dumps({
                 "total_products": filter_result.data.products_count,
