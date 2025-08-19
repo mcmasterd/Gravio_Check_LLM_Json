@@ -71,10 +71,12 @@ class QuickStart:
             elif action == "2":
                 self._action_process_data()
             elif action == "3":
-                self._action_view_results()
+                self._action_upload_csv()
             elif action == "4":
-                self._action_new_processor()
+                self._action_view_results()
             elif action == "5":
+                self._action_new_processor()
+            elif action == "6":
                 self._action_help()
             else:
                 console.print("👋 Goodbye!", style="yellow")
@@ -152,17 +154,18 @@ Hệ thống mới này cung cấp:
         
         table.add_row("1", "🧪 Test System", "Test processor.py connections")
         table.add_row("2", "⚙️ Process Data", "Run processor.py for data processing")
-        table.add_row("3", "📊 View Results", "View recent processing results")
-        table.add_row("4", "� New Processor", "Launch processor.py with options")
-        table.add_row("5", "💡 Help", "Show migration guide & commands")
-        table.add_row("6", "🚪 Exit", "Exit the application")
+        table.add_row("3", "� Upload CSV", "Upload CSV files to Google Sheets")
+        table.add_row("4", "�📊 View Results", "View recent processing results")
+        table.add_row("5", "� New Processor", "Launch processor.py with options")
+        table.add_row("6", "💡 Help", "Show migration guide & commands")
+        table.add_row("7", "🚪 Exit", "Exit the application")
         
         console.print(table)
         
         # Get user choice
         choice = Prompt.ask(
             "Select an option",
-            choices=["1", "2", "3", "4", "5", "6"],
+            choices=["1", "2", "3", "4", "5", "6", "7"],
             default="1"
         )
         
@@ -202,6 +205,15 @@ Hệ thống mới này cung cấp:
         console.print(Panel("📤 Upload CSV Files", border_style="green"))
         
         try:
+            # Kiểm tra services đã khởi tạo chưa
+            if not self.service_container or not self.sheets_service:
+                console.print("❌ Services chưa được khởi tạo", style="red")
+                return
+                
+            # Tạo file processor service
+            from services.file_processor_service import FileProcessorService
+            file_processor = FileProcessorService()
+            
             # Get input path
             input_path = Prompt.ask(
                 "Enter CSV file or directory path",
@@ -218,23 +230,50 @@ Hệ thống mới này cung cấp:
             
             # Upload
             if Path(input_path).is_file():
-                # Single file
-                result = self.batch_processor.upload_csv_to_sheet(
-                    csv_file=input_path,
-                    clear_existing=clear_existing,
-                    avoid_duplicates=avoid_duplicates
-                )
-                console.print(f"Upload result: {result['status']}")
+                # Single file - Sử dụng services sẵn có
+                console.print(f"🔄 Loading CSV file: {input_path}", style="blue")
+                data = file_processor.load_data(input_path)
+                
+                # Clear existing nếu cần
+                if clear_existing:
+                    last_row = self.sheets_service.get_last_row_with_data()
+                    if last_row > 1:  # Skip header
+                        console.print(f"🧹 Clearing existing data (rows 2-{last_row})...", style="yellow")
+                        self.sheets_service.clear_output_columns(2, last_row)
+                
+                # Tải lên sheet
+                console.print("🔄 Uploading data to sheet...", style="blue")
+                result = self.sheets_service.append_new_data(data, avoid_duplicates=avoid_duplicates)
+                
                 if result['status'] == 'success':
-                    console.print(f"✅ Uploaded {result['uploaded_rows']} rows")
+                    console.print(f"✅ Uploaded {result['added_rows']} rows, skipped {result.get('duplicate_skipped', 0)} duplicates", style="green")
+                else:
+                    console.print(f"❌ Upload failed: {result.get('reason', 'Unknown error')}", style="red")
             else:
-                # Directory
-                results = self.batch_processor.upload_multiple_csvs(
-                    csv_directory=input_path,
-                    avoid_duplicates=avoid_duplicates
-                )
-                successful = [r for r in results if r['status'] == 'success']
-                console.print(f"✅ {len(successful)} files uploaded successfully")
+                # Directory - Xử lý nhiều file
+                dir_path = Path(input_path)
+                csv_files = list(dir_path.glob("**/*.csv"))
+                
+                if not csv_files:
+                    console.print(f"⚠️ No CSV files found in {input_path}", style="yellow")
+                    return
+                    
+                console.print(f"📂 Found {len(csv_files)} CSV files", style="blue")
+                
+                total_added = 0
+                total_skipped = 0
+                
+                for csv_file in csv_files:
+                    console.print(f"\n📄 Processing {csv_file.name}", style="cyan")
+                    data = file_processor.load_data(str(csv_file))
+                    result = self.sheets_service.append_new_data(data, avoid_duplicates=avoid_duplicates)
+                    
+                    if result['status'] == 'success':
+                        total_added += result['added_rows']
+                        total_skipped += result.get('duplicate_skipped', 0)
+                        console.print(f"✅ Added {result['added_rows']} rows, skipped {result.get('duplicate_skipped', 0)} duplicates", style="green")
+                
+                console.print(f"\n📊 Total: Added {total_added} rows, skipped {total_skipped} duplicates", style="bold green")
                 
         except Exception as e:
             console.print(f"❌ Upload failed: {e}", style="red")

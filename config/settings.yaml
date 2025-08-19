@@ -17,7 +17,7 @@ google_sheets:
 
 # API Configuration
 api:
-  base_url: "https://gravio-chat.myshopify.com/api/mcp"
+  base_url: "https://gravio-app.myshopify.com/api/mcp"
   method: "POST"
   headers:
     Content-Type: "application/json"
