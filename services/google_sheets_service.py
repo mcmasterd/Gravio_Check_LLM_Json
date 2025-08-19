@@ -63,8 +63,8 @@ class GoogleSheetsService:
                     return []
                 values = all_values[start_row-1:]  # -1 because get_all_values is 0-indexed
             else:
-                # Get specific range - mở rộng để bao gồm cột D, E, F
-                range_name = f"A{start_row}:F{end_row}"
+                # Get specific range - mở rộng để bao gồm cột D..H (do map lại cột)
+                range_name = f"A{start_row}:H{end_row}"
                 values = self.worksheet.get(range_name)
                 if not values:
                     return []
@@ -78,9 +78,11 @@ class GoogleSheetsService:
                         'id': row[0] if len(row) > 0 else str(start_row + i),
                         'input_text': row[1] if len(row) > 1 else '',
                         'case': row[2] if len(row) > 2 else '',
-                        'json_output': row[3] if len(row) > 3 else '',      # Cột D
-                        'api_response': row[4] if len(row) > 4 else '',     # Cột E  
-                        'filtered_response': row[5] if len(row) > 5 else '' # Cột F
+                        'json_output': row[3] if len(row) > 3 else '',       # Cột D (LLM JSON)
+                        'api_request': row[4] if len(row) > 4 else '',       # Cột E (API request JSON)
+                        'api_response': row[5] if len(row) > 5 else '',      # Cột F (API response)
+                        'filtered_response': row[6] if len(row) > 6 else '', # Cột G (summary/filtered)
+                        'model_info': row[7] if len(row) > 7 else ''         # Cột H
                     }
                     input_data.append(item)
             
@@ -94,7 +96,7 @@ class GoogleSheetsService:
     def update_single_row(self, row_number: int, data: Dict[str, str], delay: float = 0.1):
         """Update một row với kết quả processing"""
         try:
-            # Map data to columns (D, E, F, G)
+            # Map data to columns (D..H)
             updates = []
             
             # Column D: JSON Output
@@ -103,25 +105,28 @@ class GoogleSheetsService:
                     'range': f'D{row_number}',
                     'values': [[data['json_output']]]
                 })
-            
-            # Column E: API Response
-            if 'api_response' in data:
+            # Column E: API Request (formatted)
+            if 'api_request' in data:
                 updates.append({
                     'range': f'E{row_number}',
-                    'values': [[data['api_response']]]
+                    'values': [[data['api_request']]]
                 })
-            
-            # Column F: Filtered Response
-            if 'filtered_response' in data:
+            # Column F: API Response
+            if 'api_response' in data:
                 updates.append({
                     'range': f'F{row_number}',
-                    'values': [[data['filtered_response']]]
+                    'values': [[data['api_response']]]
                 })
-            
-            # Column G: Model Info
-            if 'model_info' in data:
+            # Column G: Filtered/Summary
+            if 'filtered_response' in data:
                 updates.append({
                     'range': f'G{row_number}',
+                    'values': [[data['filtered_response']]]
+                })
+            # Column H: Model Info
+            if 'model_info' in data:
+                updates.append({
+                    'range': f'H{row_number}',
                     'values': [[data['model_info']]]
                 })
             
@@ -152,22 +157,24 @@ class GoogleSheetsService:
                         'range': f'D{row_number}',
                         'values': [[data['json_output']]]
                     })
-                
-                if 'api_response' in data:
+                if 'api_request' in data:
                     batch_updates.append({
                         'range': f'E{row_number}',
-                        'values': [[data['api_response']]]
+                        'values': [[data['api_request']]]
                     })
-                
-                if 'filtered_response' in data:
+                if 'api_response' in data:
                     batch_updates.append({
                         'range': f'F{row_number}',
-                        'values': [[data['filtered_response']]]
+                        'values': [[data['api_response']]]
                     })
-                
-                if 'model_info' in data:
+                if 'filtered_response' in data:
                     batch_updates.append({
                         'range': f'G{row_number}',
+                        'values': [[data['filtered_response']]]
+                    })
+                if 'model_info' in data:
+                    batch_updates.append({
+                        'range': f'H{row_number}',
                         'values': [[data['model_info']]]
                     })
             
@@ -202,11 +209,11 @@ class GoogleSheetsService:
             return 0
     
     def clear_output_columns(self, start_row: int, end_row: int):
-        """Clear output columns (D, E, F, G) trong range"""
+        """Clear output columns (D..H) trong range"""
         try:
-            # Clear columns D to G
+            # Clear columns D to H
             ranges_to_clear = [
-                f'D{start_row}:G{end_row}'
+                f'D{start_row}:H{end_row}'
             ]
             
             for range_name in ranges_to_clear:
@@ -224,11 +231,11 @@ class GoogleSheetsService:
             # Check if headers exist
             first_row = self.worksheet.row_values(1)
             
-            expected_headers = ['ID', 'Input Text', 'Case', 'JSON Output', 'API Response', 'Filtered Response', 'Model Info']
+            expected_headers = ['ID', 'Input Text', 'Case', 'JSON Output', 'API Request', 'API Response', 'Filtered Response', 'Model Info']
             
             if not first_row or len(first_row) < len(expected_headers):
                 # Add headers
-                self.worksheet.update('A1:G1', [expected_headers])
+                self.worksheet.update('A1:H1', [expected_headers])
                 console.print("✅ Added headers to sheet", style="green")
             
         except Exception as e:

@@ -7,6 +7,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
+import re
 
 @dataclass
 class BatchItem:
@@ -28,6 +29,7 @@ class ProcessingResult:
     """Kết quả xử lý một item"""
     item_id: str
     row_number: int
+    api_request: str = ""
     json_output: str = ""
     api_response: str = ""
     filtered_response: str = ""
@@ -191,3 +193,197 @@ def filter_api_response(response: Dict[str, Any], keep_fields: List[str] = None,
         json_str = json_str[:max_length] + "...[TRUNCATED]"
     
     return json_str
+
+# =========================
+# Discovery → Targeted helpers (adapter/orchestrator)
+# =========================
+
+def _safe_get_available_filters(api_response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract available_filters array from MCP JSON-RPC response."""
+    try:
+        result = api_response.get("result", {}) or api_response.get("data", {})
+        contents = result.get("content", [])
+        for item in contents:
+            if isinstance(item, dict) and item.get("type") == "text" and "text" in item:
+                try:
+                    as_json = json.loads(item["text"])  # text contains JSON string
+                    if isinstance(as_json, dict) and "available_filters" in as_json:
+                        return as_json.get("available_filters") or []
+                except Exception:
+                    continue
+        # Fallback: direct structure
+        if isinstance(result, dict) and "available_filters" in result:
+            return result.get("available_filters") or []
+        return []
+    except Exception:
+        return []
+
+
+def extract_available_filters(api_response: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize available_filters into a convenient descriptor.
+    Returns:
+      {
+        "supports": {
+           "productType": bool,
+           "price": bool,
+           "available": bool,
+           "tag": bool,
+           "variantOption": {"Color": True, "Size": True, ...},
+           "productMetafield": [{"namespace":"specs","key":"material"}, ...]
+        },
+        "raw": [...]
+      }
+    """
+    afs = _safe_get_available_filters(api_response)
+    supports: Dict[str, Any] = {
+        "productType": False,
+        "price": False,
+        "available": False,
+        "tag": False,
+        "variantOption": {},
+        "productMetafield": [],
+    }
+
+    for f in afs or []:
+        values = (f or {}).get("values", {}) or {}
+        input_opts = values.get("input_options", []) or []
+        for opt in input_opts:
+            inp = (opt or {}).get("input", {}) or {}
+            if "productType" in inp:
+                supports["productType"] = True
+            if "price" in inp:
+                supports["price"] = True
+            if "available" in inp:
+                supports["available"] = True
+            if "tag" in inp:
+                supports["tag"] = True
+            if "variantOption" in inp:
+                vo = inp.get("variantOption", {}) or {}
+                name = (vo.get("name") or "").strip()
+                if name:
+                    supports["variantOption"][name] = True
+            if "productMetafield" in inp:
+                pm = inp.get("productMetafield", {}) or {}
+                nk = {"namespace": pm.get("namespace"), "key": pm.get("key")}
+                if nk not in supports["productMetafield"]:
+                    supports["productMetafield"].append(nk)
+
+    return {"supports": supports, "raw": afs}
+
+
+def _normalize_title(s: str) -> str:
+    return (s or "").strip().title()
+
+
+def _normalize_upper(s: str) -> str:
+    return (s or "").strip().upper()
+
+
+def llm_to_mcp_filters(llm_filters: Dict[str, Any], available_filter_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Map LLM filters JSON into MCP filters array, keeping only supported filters."""
+    out: List[Dict[str, Any]] = []
+    if not isinstance(llm_filters, dict):
+        return out
+
+    supports = (available_filter_info or {}).get("supports", {}) or {}
+
+    # productType
+    if llm_filters.get("productType") and supports.get("productType"):
+        out.append({"productType": _normalize_title(llm_filters["productType"])})
+
+    # colors -> variantOption Color
+    if isinstance(llm_filters.get("colors"), list) and supports.get("variantOption", {}).get("Color"):
+        for c in llm_filters["colors"]:
+            out.append({"variantOption": {"name": "Color", "value": _normalize_title(c)}})
+
+    # sizes -> variantOption Size
+    if isinstance(llm_filters.get("sizes"), list) and supports.get("variantOption", {}).get("Size"):
+        for s in llm_filters["sizes"]:
+            out.append({"variantOption": {"name": "Size", "value": _normalize_upper(s)}})
+
+    # materials -> productMetafield if available
+    if isinstance(llm_filters.get("materials"), list):
+        pm_list = supports.get("productMetafield", []) or []
+        material_meta = None
+        for item in pm_list:
+            if (item.get("key") or "").lower() == "material":
+                material_meta = item
+                break
+        if material_meta:
+            ns = material_meta.get("namespace") or "specs"
+            key = material_meta.get("key") or "material"
+            for m in llm_filters["materials"]:
+                out.append({"productMetafield": {"namespace": ns, "key": key, "value": m}})
+
+    # price
+    price_obj = llm_filters.get("price") or llm_filters.get("priceRange")
+    if supports.get("price") and isinstance(price_obj, dict):
+        min_v = float(price_obj.get("min", 0)) if price_obj.get("min") is not None else 0.0
+        max_v = price_obj.get("max")
+        if max_v is not None:
+            out.append({"price": {"min": float(min_v), "max": float(max_v)}})
+
+    # tags / sales
+    if isinstance(llm_filters.get("sales"), list) and supports.get("tag"):
+        for tag in llm_filters["sales"]:
+            out.append({"tag": str(tag)})
+
+    # availability
+    if llm_filters.get("available") is not None and supports.get("available"):
+        out.append({"available": bool(llm_filters.get("available"))})
+
+    return out
+
+
+def _pick_discovery_query(llm_json: Dict[str, Any]) -> str:
+    f = (llm_json.get("filters") or {}) if isinstance(llm_json, dict) else {}
+    if f.get("productType"):
+        return str(f["productType"])
+    kws = llm_json.get("keywords") or []
+    if isinstance(kws, list) and kws:
+        return str(kws[0])
+    return "products"
+
+
+def _pick_target_query(llm_json: Dict[str, Any]) -> str:
+    return llm_json.get("clean_query") or " ".join(llm_json.get("keywords", [])) or "products"
+
+
+def search_with_llm_filters(
+    client: Any,
+    llm_json: Dict[str, Any],
+    discovery_limit: int = 5,
+    targeted_limit: int = 10,
+    context_prefix: str = "intelligent search",
+):
+    """Run Discovery -> Adapter -> Targeted using ShopifyAPIClient.
+    Returns (discovery_response_json, targeted_response_json, used_filters)
+    """
+    # Discovery
+    discovery_query = _pick_discovery_query(llm_json)
+    disc_res = client.search_products(
+        query=discovery_query,
+        context=f"{context_prefix} - discovery search to list available filters for {discovery_query}",
+        limit=discovery_limit,
+    )
+
+    if not getattr(disc_res, "success", False):
+        return getattr(disc_res, "data", {}) or {}, {}, []
+
+    disc_json = disc_res.data if isinstance(disc_res.data, dict) else disc_res.data
+    af_info = extract_available_filters(disc_json)
+
+    # Adapter
+    mcp_filters = llm_to_mcp_filters((llm_json or {}).get("filters", {}), af_info)
+
+    # Targeted
+    target_query = _pick_target_query(llm_json)
+    targ_res = client.search_products(
+        query=target_query,
+        context=f"{context_prefix} - targeted search generated from LLM filters",
+        limit=targeted_limit,
+        filters=mcp_filters if mcp_filters else None,
+    )
+
+    targeted_json = getattr(targ_res, "data", {}) if getattr(targ_res, "success", False) else {}
+    return disc_json, targeted_json, mcp_filters

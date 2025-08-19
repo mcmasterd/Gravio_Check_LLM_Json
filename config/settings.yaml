@@ -32,6 +32,8 @@ processing:
   delay_between_requests: 1.0  # Giây delay giữa các request
   resume_enabled: true
   checkpoint_interval: 10  # Save checkpoint mỗi 10 rows
+  intelligent_discovery: true  # Bật flow Discovery -> Targeted
+  strict_filters: true  # Chỉ gửi filters hợp lệ theo available_filters (khi có Discovery)
 
 # Rate Limits (requests per minute)
 rate_limits:
