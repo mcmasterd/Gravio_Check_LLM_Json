@@ -194,6 +194,20 @@ class WorkflowOrchestrator:
     def _process_single_item(self, item: Dict[str, Any]) -> ProcessingResult:
         """Process single item through complete workflow"""
         
+        def pretty_json(obj):
+            if isinstance(obj, dict):
+                return {k: pretty_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [pretty_json(v) for v in obj]
+            elif isinstance(obj, str):
+                try:
+                    parsed = json.loads(obj)
+                    return pretty_json(parsed)
+                except Exception:
+                    return obj
+            else:
+                return obj
+        
         start_time = time.time()
         item_id = item.get('id', str(item.get('row_number', 'unknown')))
         input_text = item.get('input_text', '')
@@ -219,8 +233,25 @@ class WorkflowOrchestrator:
             # 3. Create API Query
             query = self.filter_mapper.map_to_query_string(filter_spec, llm_result.keywords)
             
-            # 4. API Call
-            api_result = self.api_client.search_products(query, context=input_text)
+            # Chuẩn hóa filter LLM sang filter API (dạng list các dict)
+            def llm_filters_to_api_filters(llm_filters):
+                api_filters = []
+                if not llm_filters:
+                    return api_filters
+                for k, v in llm_filters.items():
+                    if k == "priceRange" and isinstance(v, dict):
+                        api_filters.append({"price": {"min": v.get("min", 0), "max": v.get("max", 999999)}})
+                    elif k in ("productType", "product_type"):
+                        api_filters.append({"productType": v})
+                    elif k == "variantOption" and isinstance(v, dict):
+                        api_filters.append({"variantOption": v})
+                    # Có thể mở rộng thêm các filter khác nếu cần
+                return api_filters
+            
+            api_filters = llm_filters_to_api_filters(llm_result.filters)
+            
+            # 4. API Call (truyền filter)
+            api_result = self.api_client.search_products(query, context=input_text, filters=api_filters)
             
             if not api_result.success:
                 return ProcessingResult(
@@ -234,36 +265,56 @@ class WorkflowOrchestrator:
                 )
             
             # 5. Response Filtering
-            filter_result = self.response_filter.filter_response(api_result.data)
+            # filter_result = self.response_filter.filter_response(api_result.data)
             
-            if not filter_result.success:
-                return ProcessingResult(
-                    item_id=item_id,
-                    row_number=row_number,
-                    json_output=llm_json,
-                    api_response=json.dumps(api_result.data, ensure_ascii=False),
-                    success=False,
-                    error_message=f"Response filtering failed: {filter_result.error_message}",
-                    processing_time=time.time() - start_time
-                )
+            # 6. Update Filter Spec với results (nếu cần giữ cho các bước khác)
+            # self.filter_mapper.update_result_statistics(filter_spec, filter_result.data.to_dict())
             
-            # 6. Update Filter Spec với results
-            self.filter_mapper.update_result_statistics(filter_spec, filter_result.data.to_dict())
+            # 7. Add formatted filter_spec với icons để hiển thị filter đã áp dụng (nếu cần)
+            # formatted_filter_spec = FilterDisplayFormatter.format_filter_spec_safe(filter_spec)
+            # filter_result.data.filter_spec = formatted_filter_spec
             
-            # 7. Add formatted filter_spec với icons để hiển thị filter đã áp dụng
-            formatted_filter_spec = FilterDisplayFormatter.format_filter_spec_safe(filter_spec)
-            filter_result.data.filter_spec = formatted_filter_spec
-            
-            # 8. Create final responses với filter information included
-            api_response_json = json.dumps(filter_result.data.to_dict(), ensure_ascii=False)
-            summary_json = json.dumps({
-                "total_products": filter_result.data.products_count,
-                "status": filter_result.data.status,
-                "filter_confidence": filter_spec.confidence_score,
-                "processing_time_ms": filter_result.metadata.get('processing_time_ms', 0)
-            }, ensure_ascii=False)
-            
-            console.print(f"✅ Processed item {item_id}: {filter_result.data.products_count} products found", style="green")
+            # 8. Create final responses
+            pretty_api_response = pretty_json(api_result.data)
+            api_response_json = json.dumps(pretty_api_response, ensure_ascii=False, indent=2)
+
+            # Tạo summary cho cột F: tổng số sản phẩm và filter trả về
+            def extract_summary(api_data):
+                try:
+                    # Nếu là JSON-RPC, lấy result
+                    if isinstance(api_data, dict) and "result" in api_data:
+                        api_data = api_data["result"]
+                    products_count = 0
+                    filters = []
+                    if isinstance(api_data, dict):
+                        # Tìm số sản phẩm
+                        if "content" in api_data and isinstance(api_data["content"], list):
+                            for item in api_data["content"]:
+                                if isinstance(item, dict) and "text" in item:
+                                    try:
+                                        text_json = json.loads(item["text"])
+                                        if "products" in text_json and isinstance(text_json["products"], list):
+                                            products_count += len(text_json["products"])
+                                        if "available_filters" in text_json:
+                                            filters = text_json["available_filters"]
+                                    except Exception:
+                                        continue
+                        # Trường hợp products nằm trực tiếp
+                        if "products" in api_data and isinstance(api_data["products"], list):
+                            products_count += len(api_data["products"])
+                        if "available_filters" in api_data:
+                            filters = api_data["available_filters"]
+                    return {
+                        "products_count": products_count,
+                        "available_filters": filters
+                    }
+                except Exception:
+                    return {}
+
+            summary = extract_summary(api_result.data)
+            summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+
+            console.print(f"✅ Processed item {item_id}: API response pretty formatted", style="green")
             
             return ProcessingResult(
                 item_id=item_id,

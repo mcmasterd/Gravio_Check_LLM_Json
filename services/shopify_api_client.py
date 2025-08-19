@@ -35,11 +35,12 @@ class ShopifyAPIClient:
         self, 
         query: str, 
         context: str = "", 
-        limit: int = 10
+        limit: int = 10,
+        filters: list = None
     ) -> ServiceResult:
-        """Search products với clean interface"""
+        """Search products với clean interface, hỗ trợ truyền filters"""
         
-        request_body = self._create_search_request(query, context, limit)
+        request_body = self._create_search_request(query, context, limit, filters)
         
         for attempt in range(self.retries):
             try:
@@ -59,6 +60,7 @@ class ShopifyAPIClient:
                     data=result_data,
                     metadata={
                         'query': query,
+                        'filters': filters,
                         'response_size': len(response.content),
                         'attempt': attempt + 1
                     }
@@ -116,20 +118,22 @@ class ShopifyAPIClient:
                 metadata={"test_query": test_query}
             )
     
-    def _create_search_request(self, query: str, context: str, limit: int) -> Dict[str, Any]:
-        """Create JSON-RPC 2.0 request body"""
-        
+    def _create_search_request(self, query: str, context: str, limit: int, filters: list = None) -> Dict[str, Any]:
+        """Create JSON-RPC 2.0 request body, hỗ trợ truyền filters"""
+        arguments = {
+            "query": query,
+            "context": context or f"Customer searching for: {query}",
+            "limit": limit
+        }
+        if filters:
+            arguments["filters"] = filters
         return {
             "jsonrpc": "2.0",
             "method": "tools/call",
             "id": 1,
             "params": {
                 "name": "search_shop_catalog",
-                "arguments": {
-                    "query": query,
-                    "context": context or f"Customer searching for: {query}",
-                    "limit": limit
-                }
+                "arguments": arguments
             }
         }
     
