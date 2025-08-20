@@ -315,13 +315,30 @@ def llm_to_mcp_filters(llm_filters: Dict[str, Any], available_filter_info: Dict[
             for m in llm_filters["materials"]:
                 out.append({"productMetafield": {"namespace": ns, "key": key, "value": m}})
 
-    # price
+    # price: free-form; fill missing bound with defaults (no clamping)
     price_obj = llm_filters.get("price") or llm_filters.get("priceRange")
     if supports.get("price") and isinstance(price_obj, dict):
-        min_v = float(price_obj.get("min", 0)) if price_obj.get("min") is not None else 0.0
+        DEFAULT_MIN = 0.0
+        DEFAULT_MAX = 999999.0
+        min_v = price_obj.get("min")
         max_v = price_obj.get("max")
-        if max_v is not None:
-            out.append({"price": {"min": float(min_v), "max": float(max_v)}})
+        # If user supplies neither, skip
+        if min_v is None and max_v is None:
+            pass
+        else:
+            if min_v is None:
+                min_v = DEFAULT_MIN
+            if max_v is None:
+                max_v = DEFAULT_MAX
+            try:
+                min_f = float(min_v)
+                max_f = float(max_v)
+                # If reversed, swap to form a valid range
+                if min_f > max_f:
+                    min_f, max_f = max_f, min_f
+                out.append({"price": {"min": min_f, "max": max_f}})
+            except Exception:
+                pass
 
     # tags / sales
     if isinstance(llm_filters.get("sales"), list) and supports.get("tag"):
